@@ -1,5 +1,5 @@
 {
-	"name": "@hokify/agenda",
+	"name": "@allocab/agenda",
 	"version": "6.3.0",
 	"description": "Light weight job scheduler for Node.js",
 	"main": "dist/index.js",
@@ -35,7 +35,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git://github.com/hokify/agenda"
+		"url": "git@github.com:Allocab/agenda.git"
 	},
 	"keywords": [
 		"job",
