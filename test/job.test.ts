@@ -1,14 +1,14 @@
 /* eslint-disable no-console */
 import * as path from 'path';
 import * as cp from 'child_process';
-import { expect } from 'chai';
 import * as assert from 'node:assert';
+import { fail } from 'assert';
+import { expect } from 'chai';
 import { DateTime } from 'luxon';
 import { Db } from 'mongodb';
 
 import * as delay from 'delay';
 import * as sinon from 'sinon';
-import { fail } from 'assert';
 import { Job } from '../src/Job';
 import { Agenda } from '../src';
 import { mockMongo } from './helpers/mock-mongodb';
@@ -41,20 +41,16 @@ describe('Job', () => {
 		}
 
 		return new Promise(resolve => {
-			agenda = new Agenda(
-				{
-					mongo: mongoDb
-				},
-				async () => {
-					await delay(50);
-					await clearJobs();
-					agenda.define('someJob', jobProcessor);
-					agenda.define('send email', jobProcessor);
-					agenda.define('some job', jobProcessor);
-					agenda.define(jobType, jobProcessor);
-					return resolve();
-				}
-			);
+			agenda = new Agenda({}, async () => {
+				await delay(50);
+				await clearJobs();
+				agenda.define('someJob', jobProcessor);
+				agenda.define('send email', jobProcessor);
+				agenda.define('some job', jobProcessor);
+				agenda.define(jobType, jobProcessor);
+				return resolve();
+			});
+			agenda.mongo(mongoDb);
 		});
 	});
 
@@ -1659,7 +1655,6 @@ describe('Job', () => {
 	describe('job fork mode', () => {
 		it('runs a job in fork mode', async () => {
 			const agendaFork = new Agenda({
-				mongo: mongoDb,
 				forkHelper: {
 					path: './test/helpers/forkHelper.ts',
 					options: {
@@ -1668,7 +1663,7 @@ describe('Job', () => {
 					}
 				}
 			});
-
+			agendaFork.mongo(mongoDb);
 			expect(agendaFork.forkHelper?.path).to.be.eq('./test/helpers/forkHelper.ts');
 
 			const job = agendaFork.create('some job');
@@ -1702,7 +1697,6 @@ describe('Job', () => {
 
 		it('runs a job in fork mode, but let it fail', async () => {
 			const agendaFork = new Agenda({
-				mongo: mongoDb,
 				forkHelper: {
 					path: './test/helpers/forkHelper.ts',
 					options: {
@@ -1711,6 +1705,7 @@ describe('Job', () => {
 					}
 				}
 			});
+			agendaFork.mongo(mongoDb);
 
 			expect(agendaFork.forkHelper?.path).to.be.eq('./test/helpers/forkHelper.ts');
 
@@ -1745,7 +1740,6 @@ describe('Job', () => {
 
 		it('runs a job in fork mode, but let it die', async () => {
 			const agendaFork = new Agenda({
-				mongo: mongoDb,
 				forkHelper: {
 					path: './test/helpers/forkHelper.ts',
 					options: {
@@ -1754,6 +1748,7 @@ describe('Job', () => {
 					}
 				}
 			});
+			agendaFork.mongo(mongoDb);
 
 			expect(agendaFork.forkHelper?.path).to.be.eq('./test/helpers/forkHelper.ts');
 
@@ -1788,7 +1783,6 @@ describe('Job', () => {
 
 		it('runs a job in fork mode, but let it timeout', async () => {
 			const agendaFork = new Agenda({
-				mongo: mongoDb,
 				forkHelper: {
 					path: './test/helpers/forkHelper.ts',
 					options: {
@@ -1798,6 +1792,7 @@ describe('Job', () => {
 				},
 				defaultLockLifetime: 1000
 			});
+			agendaFork.mongo(mongoDb);
 
 			expect(agendaFork.forkHelper?.path).to.be.eq('./test/helpers/forkHelper.ts');
 

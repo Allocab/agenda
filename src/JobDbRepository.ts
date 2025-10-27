@@ -11,10 +11,10 @@ import {
 	UpdateFilter
 } from 'mongodb';
 import type { Job, JobWithId } from './Job';
-import type { Agenda } from './index';
 import type { IDatabaseOptions, IDbConfig, IMongoOptions } from './types/DbOptions';
 import type { IJobParameters } from './types/JobParameters';
 import { hasMongoProtocol } from './utils/hasMongoProtocol';
+import type { Agenda } from './index';
 
 const log = debug('agenda:db');
 
@@ -118,7 +118,7 @@ export class JobDbRepository {
 			options
 		);
 
-		return resp?.value || undefined;
+		return resp || undefined;
 	}
 
 	async getNextJobToRun(
@@ -136,7 +136,7 @@ export class JobDbRepository {
 				disabled: { $ne: true },
 				$or: [
 					{
-						lockedAt: { $eq: null as any },
+						lockedAt: null,
 						nextRunAt: { $lte: nextScanAt }
 					},
 					{
@@ -165,7 +165,7 @@ export class JobDbRepository {
 			JOB_RETURN_QUERY
 		);
 
-		return result.value || undefined;
+		return result || undefined;
 	}
 
 	async connect(): Promise<void> {
@@ -245,6 +245,7 @@ export class JobDbRepository {
 		return job;
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	async saveJobState(job: Job<any>): Promise<void> {
 		const id = job.attrs._id;
 		const $set = {
@@ -315,7 +316,7 @@ export class JobDbRepository {
 					update,
 					{ returnDocument: 'after' }
 				);
-				return this.processDbResult(job, result.value as IJobParameters<DATA>);
+				return this.processDbResult(job, result as IJobParameters<DATA>);
 			}
 
 			if (props.type === 'single') {
@@ -352,7 +353,8 @@ export class JobDbRepository {
 					update,
 					{
 						upsert: true,
-						returnDocument: 'after'
+						returnDocument: 'after',
+						includeResultMetadata: true
 					}
 				);
 				log(
@@ -379,7 +381,7 @@ export class JobDbRepository {
 					upsert: true,
 					returnDocument: 'after'
 				});
-				return this.processDbResult(job, result.value as IJobParameters<DATA>);
+				return this.processDbResult(job, result as IJobParameters<DATA>);
 			}
 
 			// If all else fails, the job does not exist yet so we just insert it into MongoDB

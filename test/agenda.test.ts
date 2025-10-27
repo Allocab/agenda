@@ -3,11 +3,11 @@
 import * as delay from 'delay';
 import { Db } from 'mongodb';
 import { expect } from 'chai';
-import { mockMongo } from './helpers/mock-mongodb';
 
 import { Agenda } from '../src';
 import { hasMongoProtocol } from '../src/utils/hasMongoProtocol';
 import { Job } from '../src/Job';
+import { mockMongo } from './helpers/mock-mongodb';
 
 // agenda instances
 let globalAgenda: Agenda;
@@ -36,20 +36,16 @@ describe('Agenda', () => {
 		}
 
 		return new Promise(resolve => {
-			globalAgenda = new Agenda(
-				{
-					mongo: mongoDb
-				},
-				async () => {
-					await delay(50);
-					await clearJobs();
-					globalAgenda.define('someJob', jobProcessor);
-					globalAgenda.define('send email', jobProcessor);
-					globalAgenda.define('some job', jobProcessor);
-					globalAgenda.define(jobType, jobProcessor);
-					return resolve();
-				}
-			);
+			globalAgenda = new Agenda({}, async () => {
+				await delay(50);
+				await clearJobs();
+				globalAgenda.define('someJob', jobProcessor);
+				globalAgenda.define('send email', jobProcessor);
+				globalAgenda.define('some job', jobProcessor);
+				globalAgenda.define(jobType, jobProcessor);
+				return resolve();
+			});
+			globalAgenda.mongo(mongoDb);
 		});
 	});
 
@@ -69,7 +65,8 @@ describe('Agenda', () => {
 
 	describe('configuration methods', () => {
 		it('sets the _db directly when passed as an option', () => {
-			const agendaDb = new Agenda({ mongo: mongoDb });
+			const agendaDb = new Agenda({});
+			agendaDb.mongo(mongoDb);
 			expect(agendaDb.db).to.not.equal(undefined);
 		});
 	});
@@ -342,11 +339,8 @@ describe('Agenda', () => {
 						.find({
 							name: 'unique job'
 						})
-						.toArray((err, jobs) => {
-							if (err) {
-								throw err;
-							}
-
+						.toArray()
+						.then(jobs => {
 							expect(jobs).to.have.length(1);
 						});
 				});
@@ -395,11 +389,8 @@ describe('Agenda', () => {
 						.find({
 							name: 'unique job'
 						})
-						.toArray((err, jobs) => {
-							if (err) {
-								throw err;
-							}
-
+						.toArray()
+						.then(jobs => {
 							expect(jobs).to.have.length(1);
 						});
 				});
@@ -443,340 +434,341 @@ describe('Agenda', () => {
 						.find({
 							name: 'unique job'
 						})
-						.toArray((err, jobs) => {
-							if (err) {
-								throw err;
-							}
-
-							expect(jobs).to.have.length(2);
+						.toArray()
+						.then(jobs => {
+							expect(jobs).to.have.length(1);
 						});
 				});
 			});
 		});
+	});
 
-		describe('now', () => {
-			it('returns a job', async () => {
-				expect(await globalAgenda.now('send email')).to.to.be.an.instanceof(Job);
-			});
-			it('sets the schedule', async () => {
-				const now = new Date();
-				expect(
-					await globalAgenda.now('send email').then(({ attrs }) => attrs.nextRunAt!.valueOf())
-				).to.greaterThan(now.valueOf() - 1);
-			});
-
-			it('runs the job immediately', async () => {
-				globalAgenda.define('immediateJob', async job => {
-					expect(await job.isRunning()).to.be.equal(true);
-					await globalAgenda.stop();
-				});
-				await globalAgenda.now('immediateJob');
-				await globalAgenda.start();
-			});
+	describe('now', () => {
+		it('returns a job', async () => {
+			expect(await globalAgenda.now('send email')).to.to.be.an.instanceof(Job);
+		});
+		it('sets the schedule', async () => {
+			const now = new Date();
+			expect(
+				await globalAgenda.now('send email').then(({ attrs }) => attrs.nextRunAt!.valueOf())
+			).to.greaterThan(now.valueOf() - 1);
 		});
 
-		describe('jobs', () => {
-			it('returns jobs', async () => {
-				await globalAgenda.create('test').save();
-				const c = await globalAgenda.jobs({});
-
-				expect(c.length).to.not.equals(0);
-				expect(c[0]).to.to.be.an.instanceof(Job);
-				await clearJobs();
-			});
-		});
-
-		describe('purge', () => {
-			it('removes all jobs without definitions', async () => {
-				const job = globalAgenda.create('no definition');
+		it('runs the job immediately', async () => {
+			globalAgenda.define('immediateJob', async job => {
+				expect(await job.isRunning()).to.be.equal(true);
 				await globalAgenda.stop();
-				await job.save();
-				const j = await globalAgenda.jobs({
-					name: 'no definition'
-				});
-
-				expect(j).to.have.length(1);
-				await globalAgenda.purge();
-				const jAfterPurge = await globalAgenda.jobs({
-					name: 'no definition'
-				});
-
-				expect(jAfterPurge).to.have.length(0);
 			});
-		});
-
-		describe('saveJob', () => {
-			it('persists job to the database', async () => {
-				const job = globalAgenda.create('someJob', {});
-				await job.save();
-
-				expect(job.attrs._id).to.not.be.equal(undefined);
-
-				await clearJobs();
-			});
-		});
-	});
-
-	describe('cancel', () => {
-		beforeEach(async () => {
-			let remaining = 3;
-			const checkDone = () => {
-				remaining -= 1;
-			};
-
-			await globalAgenda.create('jobA').save().then(checkDone);
-			await globalAgenda.create('jobA', 'someData').save().then(checkDone);
-			await globalAgenda.create('jobB').save().then(checkDone);
-			expect(remaining).to.equal(0);
-		});
-
-		afterEach(async () => {
-			await globalAgenda.db.removeJobs({ name: { $in: ['jobA', 'jobB'] } });
-		});
-
-		it('should cancel a job', async () => {
-			const j = await globalAgenda.jobs({ name: 'jobA' });
-			expect(j).to.have.length(2);
-
-			await globalAgenda.cancel({ name: 'jobA' });
-			const job = await globalAgenda.jobs({ name: 'jobA' });
-
-			expect(job).to.have.length(0);
-		});
-
-		it('should cancel multiple jobs', async () => {
-			const jobs1 = await globalAgenda.jobs({ name: { $in: ['jobA', 'jobB'] } });
-			expect(jobs1).to.have.length(3);
-			await globalAgenda.cancel({ name: { $in: ['jobA', 'jobB'] } });
-
-			const jobs2 = await globalAgenda.jobs({ name: { $in: ['jobA', 'jobB'] } });
-			expect(jobs2).to.have.length(0);
-		});
-
-		it('should cancel jobs only if the data matches', async () => {
-			const jobs1 = await globalAgenda.jobs({ name: 'jobA', data: 'someData' });
-			expect(jobs1).to.have.length(1);
-			await globalAgenda.cancel({ name: 'jobA', data: 'someData' });
-
-			const jobs2 = await globalAgenda.jobs({ name: 'jobA', data: 'someData' });
-			expect(jobs2).to.have.length(0);
-
-			const jobs3 = await globalAgenda.jobs({ name: 'jobA' });
-			expect(jobs3).to.have.length(1);
-		});
-	});
-
-	describe('search', () => {
-		beforeEach(async () => {
-			await globalAgenda.create('jobA', 1).save();
-			await globalAgenda.create('jobA', 2).save();
-			await globalAgenda.create('jobA', 3).save();
-		});
-
-		afterEach(async () => {
-			await globalAgenda.db.removeJobs({ name: 'jobA' });
-		});
-
-		it('should limit jobs', async () => {
-			const results = await globalAgenda.jobs({ name: 'jobA' }, {}, 2);
-			expect(results).to.have.length(2);
-		});
-
-		it('should skip jobs', async () => {
-			const results = await globalAgenda.jobs({ name: 'jobA' }, {}, 2, 2);
-			expect(results).to.have.length(1);
-		});
-
-		it('should sort jobs', async () => {
-			const results = await globalAgenda.jobs({ name: 'jobA' }, { data: -1 });
-
-			expect(results).to.have.length(3);
-
-			const job1 = results[0];
-			const job2 = results[1];
-			const job3 = results[2];
-
-			expect(job1.attrs.data).to.equal(3);
-			expect(job2.attrs.data).to.equal(2);
-			expect(job3.attrs.data).to.equal(1);
-		});
-	});
-
-	describe('ensureIndex findAndLockNextJobIndex', () => {
-		it('ensureIndex-Option false does not create index findAndLockNextJobIndex', async () => {
-			const agenda = new Agenda({
-				mongo: mongoDb,
-				ensureIndex: false
-			});
-
-			agenda.define('someJob', jobProcessor);
-			await agenda.create('someJob', 1).save();
-
-			const listIndex = await mongoDb.command({ listIndexes: 'agendaJobs' });
-			expect(listIndex.cursor.firstBatch).to.have.lengthOf(1);
-			expect(listIndex.cursor.firstBatch[0].name).to.be.equal('_id_');
-		});
-
-		it('ensureIndex-Option true does create index findAndLockNextJobIndex', async () => {
-			const agenda = new Agenda({
-				mongo: mongoDb,
-				ensureIndex: true
-			});
-
-			agenda.define('someJob', jobProcessor);
-			await agenda.create('someJob', 1).save();
-
-			const listIndex = await mongoDb.command({ listIndexes: 'agendaJobs' });
-			expect(listIndex.cursor.firstBatch).to.have.lengthOf(2);
-			expect(listIndex.cursor.firstBatch[0].name).to.be.equal('_id_');
-			expect(listIndex.cursor.firstBatch[1].name).to.be.equal('findAndLockNextJobIndex');
-		});
-
-		it('creating two agenda-instances with ensureIndex-Option true does not throw an error', async () => {
-			const agenda = new Agenda({
-				mongo: mongoDb,
-				ensureIndex: true
-			});
-
-			agenda.define('someJob', jobProcessor);
-			await agenda.create('someJob', 1).save();
-
-			const secondAgenda = new Agenda({
-				mongo: mongoDb,
-				ensureIndex: true
-			});
-
-			secondAgenda.define('someJob', jobProcessor);
-			await secondAgenda.create('someJob', 1).save();
-		});
-	});
-
-	describe('process jobs', () => {
-		// eslint-disable-line prefer-arrow-callback
-		it('do not run failed jobs again', async () => {
-			const unhandledRejections: any[] = [];
-			const rejectionsHandler = error => unhandledRejections.push(error);
-			process.on('unhandledRejection', rejectionsHandler);
-
-			let jprocesses = 0;
-
-			globalAgenda.define('failing job', async _job => {
-				jprocesses++;
-				throw new Error('failed');
-			});
-
-			let failCalled = false;
-			globalAgenda.on('fail:failing job', _err => {
-				failCalled = true;
-			});
-
-			let errorCalled = false;
-			globalAgenda.on('error', _err => {
-				errorCalled = true;
-			});
-
-			globalAgenda.processEvery(100);
+			await globalAgenda.now('immediateJob');
 			await globalAgenda.start();
+		});
+	});
 
-			await globalAgenda.now('failing job');
+	describe('jobs', () => {
+		it('returns jobs', async () => {
+			await globalAgenda.create('test').save();
+			const c = await globalAgenda.jobs({});
 
-			await delay(500);
+			expect(c.length).to.not.equals(0);
+			expect(c[0]).to.to.be.an.instanceof(Job);
+			await clearJobs();
+		});
+	});
 
-			process.removeListener('unhandledRejection', rejectionsHandler);
-
-			expect(jprocesses).to.be.equal(1);
-			expect(errorCalled).to.be.false;
-			expect(failCalled).to.be.true;
-			expect(unhandledRejections).to.have.length(0);
-		}).timeout(10000);
-
-		// eslint-disable-line prefer-arrow-callback
-		it('ensure there is no unhandledPromise on job timeouts', async () => {
-			const unhandledRejections: any[] = [];
-			const rejectionsHandler = error => unhandledRejections.push(error);
-			process.on('unhandledRejection', rejectionsHandler);
-
-			globalAgenda.define(
-				'very short timeout',
-				(_job, done) => {
-					setTimeout(() => {
-						done();
-					}, 10000);
-				},
-				{
-					lockLifetime: 100
-				}
-			);
-
-			let errorCalled = false;
-			globalAgenda.on('error', _err => {
-				errorCalled = true;
+	describe('purge', () => {
+		it('removes all jobs without definitions', async () => {
+			const job = globalAgenda.create('no definition');
+			await globalAgenda.stop();
+			await job.save();
+			const j = await globalAgenda.jobs({
+				name: 'no definition'
 			});
 
-			globalAgenda.processEvery(100);
-			await globalAgenda.start();
+			expect(j).to.have.length(1);
+			await globalAgenda.purge();
+			const jAfterPurge = await globalAgenda.jobs({
+				name: 'no definition'
+			});
 
-			// await globalAgenda.every('1 seconds', 'j0');
-			await globalAgenda.now('very short timeout');
+			expect(jAfterPurge).to.have.length(0);
+		});
+	});
 
-			await delay(500);
+	describe('saveJob', () => {
+		it('persists job to the database', async () => {
+			const job = globalAgenda.create('someJob', {});
+			await job.save();
 
-			process.removeListener('unhandledRejection', rejectionsHandler);
+			expect(job.attrs._id).to.not.be.equal(undefined);
 
-			expect(errorCalled).to.be.true;
-			expect(unhandledRejections).to.have.length(0);
-		}).timeout(10000);
+			await clearJobs();
+		});
+	});
+});
 
-		it('should not cause unhandledRejection', async () => {
-			// This unit tests if for this bug [https://github.com/agenda/agenda/issues/884]
-			// which is not reproducible with default agenda config on shorter processEvery.
-			// Thus we set the test timeout to 10000, and the delay below to 6000.
+describe('cancel', () => {
+	beforeEach(async () => {
+		let remaining = 3;
+		const checkDone = () => {
+			remaining -= 1;
+		};
 
-			const unhandledRejections: any[] = [];
-			const rejectionsHandler = error => unhandledRejections.push(error);
-			process.on('unhandledRejection', rejectionsHandler);
+		await globalAgenda.create('jobA').save().then(checkDone);
+		await globalAgenda.create('jobA', 'someData').save().then(checkDone);
+		await globalAgenda.create('jobB').save().then(checkDone);
+		expect(remaining).to.equal(0);
+	});
 
-			/*
+	afterEach(async () => {
+		await globalAgenda.db.removeJobs({ name: { $in: ['jobA', 'jobB'] } });
+	});
+
+	it('should cancel a job', async () => {
+		const j = await globalAgenda.jobs({ name: 'jobA' });
+		expect(j).to.have.length(2);
+
+		await globalAgenda.cancel({ name: 'jobA' });
+		const job = await globalAgenda.jobs({ name: 'jobA' });
+
+		expect(job).to.have.length(0);
+	});
+
+	it('should cancel multiple jobs', async () => {
+		const jobs1 = await globalAgenda.jobs({ name: { $in: ['jobA', 'jobB'] } });
+		expect(jobs1).to.have.length(3);
+		await globalAgenda.cancel({ name: { $in: ['jobA', 'jobB'] } });
+
+		const jobs2 = await globalAgenda.jobs({ name: { $in: ['jobA', 'jobB'] } });
+		expect(jobs2).to.have.length(0);
+	});
+
+	it('should cancel jobs only if the data matches', async () => {
+		const jobs1 = await globalAgenda.jobs({ name: 'jobA', data: 'someData' });
+		expect(jobs1).to.have.length(1);
+		await globalAgenda.cancel({ name: 'jobA', data: 'someData' });
+
+		const jobs2 = await globalAgenda.jobs({ name: 'jobA', data: 'someData' });
+		expect(jobs2).to.have.length(0);
+
+		const jobs3 = await globalAgenda.jobs({ name: 'jobA' });
+		expect(jobs3).to.have.length(1);
+	});
+});
+
+describe('search', () => {
+	beforeEach(async () => {
+		await globalAgenda.create('jobA', 1).save();
+		await globalAgenda.create('jobA', 2).save();
+		await globalAgenda.create('jobA', 3).save();
+	});
+
+	afterEach(async () => {
+		await globalAgenda.db.removeJobs({ name: 'jobA' });
+	});
+
+	it('should limit jobs', async () => {
+		const results = await globalAgenda.jobs({ name: 'jobA' }, {}, 2);
+		expect(results).to.have.length(2);
+	});
+
+	it('should skip jobs', async () => {
+		const results = await globalAgenda.jobs({ name: 'jobA' }, {}, 2, 2);
+		expect(results).to.have.length(1);
+	});
+
+	it('should sort jobs', async () => {
+		const results = await globalAgenda.jobs({ name: 'jobA' }, { data: -1 });
+
+		expect(results).to.have.length(3);
+
+		const job1 = results[0];
+		const job2 = results[1];
+		const job3 = results[2];
+
+		expect(job1.attrs.data).to.equal(3);
+		expect(job2.attrs.data).to.equal(2);
+		expect(job3.attrs.data).to.equal(1);
+	});
+});
+
+describe('ensureIndex findAndLockNextJobIndex', () => {
+	it('ensureIndex-Option false does not create index findAndLockNextJobIndex', async () => {
+		const agenda = new Agenda({
+			ensureIndex: false
+		});
+		agenda.mongo(mongoDb);
+
+		agenda.define('someJob', jobProcessor);
+		await agenda.create('someJob', 1).save();
+
+		const listIndex = await mongoDb.command({ listIndexes: 'agendaJobs' });
+		expect(listIndex.cursor.firstBatch).to.have.lengthOf(1);
+		expect(listIndex.cursor.firstBatch[0].name).to.be.equal('_id_');
+	});
+
+	it('ensureIndex-Option true does create index findAndLockNextJobIndex', async () => {
+		const agenda = new Agenda({
+			mongo: mongoDb,
+			ensureIndex: true
+		});
+
+		agenda.define('someJob', jobProcessor);
+		agenda.define('otherJob', jobProcessor);
+
+		await agenda.create('someJob', 1).save();
+		await agenda.create('otherJob', 1).save();
+
+		const listIndex = await mongoDb.command({ listIndexes: 'agendaJobs' });
+		console.log(JSON.stringify(listIndex.cursor.firstBatch));
+		expect(listIndex.cursor.firstBatch).to.have.lengthOf(2);
+		expect(listIndex.cursor.firstBatch[0].name).to.be.equal('_id_');
+		expect(listIndex.cursor.firstBatch[1].name).to.be.equal('findAndLockNextJobIndex');
+	});
+
+	it('creating two agenda-instances with ensureIndex-Option true does not throw an error', async () => {
+		const agenda = new Agenda({
+			ensureIndex: true
+		});
+		agenda.mongo(mongoDb);
+
+		agenda.define('someJob', jobProcessor);
+		await agenda.create('someJob', 1).save();
+
+		const secondAgenda = new Agenda({
+			ensureIndex: true
+		});
+		agenda.mongo(mongoDb);
+
+		secondAgenda.define('someJob', jobProcessor);
+		await secondAgenda.create('someJob', 1).save();
+	});
+});
+
+describe('process jobs', () => {
+	// eslint-disable-line prefer-arrow-callback
+	it('do not run failed jobs again', async () => {
+		const unhandledRejections: any[] = [];
+		const rejectionsHandler = error => unhandledRejections.push(error);
+		process.on('unhandledRejection', rejectionsHandler);
+
+		let jprocesses = 0;
+
+		globalAgenda.define('failing job', async _job => {
+			jprocesses++;
+			throw new Error('failed');
+		});
+
+		let failCalled = false;
+		globalAgenda.on('fail:failing job', _err => {
+			failCalled = true;
+		});
+
+		let errorCalled = false;
+		globalAgenda.on('error', _err => {
+			errorCalled = true;
+		});
+
+		globalAgenda.processEvery(100);
+		await globalAgenda.start();
+
+		await globalAgenda.now('failing job');
+
+		await delay(500);
+
+		process.removeListener('unhandledRejection', rejectionsHandler);
+
+		expect(jprocesses).to.be.equal(1);
+		expect(errorCalled).to.be.false;
+		expect(failCalled).to.be.true;
+		expect(unhandledRejections).to.have.length(0);
+	}).timeout(10000);
+
+	// eslint-disable-line prefer-arrow-callback
+	it('ensure there is no unhandledPromise on job timeouts', async () => {
+		const unhandledRejections: any[] = [];
+		const rejectionsHandler = error => unhandledRejections.push(error);
+		process.on('unhandledRejection', rejectionsHandler);
+
+		globalAgenda.define(
+			'very short timeout',
+			(_job, done) => {
+				setTimeout(() => {
+					done();
+				}, 10000);
+			},
+			{
+				lockLifetime: 100
+			}
+		);
+
+		let errorCalled = false;
+		globalAgenda.on('error', _err => {
+			errorCalled = true;
+		});
+
+		globalAgenda.processEvery(100);
+		await globalAgenda.start();
+
+		// await globalAgenda.every('1 seconds', 'j0');
+		await globalAgenda.now('very short timeout');
+
+		await delay(500);
+
+		process.removeListener('unhandledRejection', rejectionsHandler);
+
+		expect(errorCalled).to.be.true;
+		expect(unhandledRejections).to.have.length(0);
+	}).timeout(10000);
+
+	it('should not cause unhandledRejection', async () => {
+		// This unit tests if for this bug [https://github.com/agenda/agenda/issues/884]
+		// which is not reproducible with default agenda config on shorter processEvery.
+		// Thus we set the test timeout to 10000, and the delay below to 6000.
+
+		const unhandledRejections: any[] = [];
+		const rejectionsHandler = error => unhandledRejections.push(error);
+		process.on('unhandledRejection', rejectionsHandler);
+
+		/*
 			let j0processes = 0;
 			globalAgenda.define('j0', (_job, done) => {
 				j0processes += 1;
 				done();
 			}); */
 
-			let j1processes = 0;
+		let j1processes = 0;
 
-			globalAgenda.define('j1', (_job, done) => {
-				j1processes += 1;
-				done();
-			});
+		globalAgenda.define('j1', (_job, done) => {
+			j1processes += 1;
+			done();
+		});
 
-			let j2processes = 0;
-			globalAgenda.define('j2', (_job, done) => {
-				j2processes += 1;
-				done();
-			});
+		let j2processes = 0;
+		globalAgenda.define('j2', (_job, done) => {
+			j2processes += 1;
+			done();
+		});
 
-			let j3processes = 0;
-			globalAgenda.define('j3', async _job => {
-				j3processes += 1;
-			});
-			await globalAgenda.start();
+		let j3processes = 0;
+		globalAgenda.define('j3', async _job => {
+			j3processes += 1;
+		});
+		await globalAgenda.start();
 
-			// await globalAgenda.every('1 seconds', 'j0');
-			await globalAgenda.every('5 seconds', 'j1');
-			await globalAgenda.every('10 seconds', 'j2');
-			await globalAgenda.every('15 seconds', 'j3');
+		// await globalAgenda.every('1 seconds', 'j0');
+		await globalAgenda.every('5 seconds', 'j1');
+		await globalAgenda.every('10 seconds', 'j2');
+		await globalAgenda.every('15 seconds', 'j3');
 
-			await delay(3001);
+		await delay(3001);
 
-			process.removeListener('unhandledRejection', rejectionsHandler);
+		process.removeListener('unhandledRejection', rejectionsHandler);
 
-			// expect(j0processes).to.equal(5);
-			expect(j1processes).to.gte(1);
-			expect(j2processes).to.equal(1);
-			expect(j3processes).to.equal(1);
+		// expect(j0processes).to.equal(5);
+		expect(j1processes).to.gte(1);
+		expect(j2processes).to.equal(1);
+		expect(j3processes).to.equal(1);
 
-			expect(unhandledRejections).to.have.length(0);
-		}).timeout(10500);
-	});
+		expect(unhandledRejections).to.have.length(0);
+	}).timeout(10500);
 });

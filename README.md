@@ -193,7 +193,7 @@ Possible agenda config options:
 		collection: string;
 		address: string;
 		options: MongoClientOptions;
-	};
+	}
 	mongo: Db;
 }
 ```

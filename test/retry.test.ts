@@ -1,9 +1,8 @@
 /* eslint-disable no-console */
 import { Db } from 'mongodb';
 import * as delay from 'delay';
-import { mockMongo } from './helpers/mock-mongodb';
-
 import { Agenda } from '../src';
+import { mockMongo } from './helpers/mock-mongodb';
 
 // agenda instances
 let agenda: Agenda;
@@ -17,7 +16,7 @@ const clearJobs = async (): Promise<void> => {
 };
 
 const jobType = 'do work';
-const jobProcessor = () => { };
+const jobProcessor = () => {};
 
 describe('Retry', () => {
 	beforeEach(async () => {
@@ -27,20 +26,16 @@ describe('Retry', () => {
 		}
 
 		return new Promise(resolve => {
-			agenda = new Agenda(
-				{
-					mongo: mongoDb
-				},
-				async () => {
-					await delay(50);
-					await clearJobs();
-					agenda.define('someJob', jobProcessor);
-					agenda.define('send email', jobProcessor);
-					agenda.define('some job', jobProcessor);
-					agenda.define(jobType, jobProcessor);
-					return resolve();
-				}
-			);
+			agenda = new Agenda({}, async () => {
+				agenda.mongo(mongoDb);
+				await delay(50);
+				await clearJobs();
+				agenda.define('someJob', jobProcessor);
+				agenda.define('send email', jobProcessor);
+				agenda.define('some job', jobProcessor);
+				agenda.define(jobType, jobProcessor);
+				return resolve();
+			});
 		});
 	});
 
@@ -75,8 +70,8 @@ describe('Retry', () => {
 		});
 
 		const successPromise = new Promise(resolve => {
-      agenda.on('success:a job', resolve)
-    });
+			agenda.on('success:a job', resolve);
+		});
 
 		await agenda.now('a job');
 

@@ -30,7 +30,6 @@ describe('JobProcessor', () => {
 		return new Promise(resolve => {
 			agenda = new Agenda(
 				{
-					mongo: mongoDb,
 					maxConcurrency: 4,
 					defaultConcurrency: 1,
 					lockLimit: 15,
@@ -43,6 +42,7 @@ describe('JobProcessor', () => {
 					return resolve();
 				}
 			);
+			agenda.mongo(mongoDb);
 		});
 	});
 
@@ -255,26 +255,28 @@ describe('JobProcessor', () => {
 		await agenda.start();
 
 		let runningJobs = 0;
-		const allJobsStarted = new Promise(async resolve => {
-			do {
-				runningJobs = (await agenda.getRunningStats()).runningJobs as number;
-				await new Promise(wait => {
-					setTimeout(wait, 50);
-				});
-			} while (runningJobs < 90); // @todo Why not 100?
-			resolve('all started');
-		});
+		const allJobsStarted = new Promise<string>(resolve => {
+			async () => {
+				do {
+					runningJobs = (await agenda.getRunningStats()).runningJobs as number;
+					await new Promise<void>(wait => {
+						setTimeout(wait, 50);
+					});
+				} while (runningJobs < 90); // @todo Why not 100?
+				resolve('all started');
+			};
 
-		expect(
-			await Promise.race([
-				allJobsStarted,
-				new Promise(resolve => {
-					setTimeout(
-						() => resolve(`not all jobs started, currently running: ${runningJobs}`),
-						1500
-					);
-				})
-			])
-		).to.equal('all started');
+			expect(async () => {
+				await Promise.race([
+					allJobsStarted,
+					new Promise(resolve => {
+						setTimeout(
+							() => resolve(`not all jobs started, currently running: ${runningJobs}`),
+							1500
+						);
+					})
+				]);
+			}).to.equal('all started');
+		});
 	});
 });

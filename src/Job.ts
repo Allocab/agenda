@@ -1,12 +1,12 @@
-import * as date from 'date.js';
-import * as debug from 'debug';
-import { ObjectId } from 'mongodb';
 import { ChildProcess, fork } from 'child_process';
-import type { Agenda } from './index';
+import { ObjectId } from 'mongodb';
+import * as debug from 'debug';
+import * as date from 'date.js';
 import type { DefinitionProcessor } from './types/JobDefinition';
 import { IJobParameters, datefields, TJobDatefield } from './types/JobParameters';
 import { JobPriority, parsePriority } from './utils/priority';
 import { computeFromInterval, computeFromRepeatAt } from './utils/nextRunAt';
+import type { Agenda } from './index';
 
 const log = debug('agenda:job');
 
@@ -41,7 +41,7 @@ export class Job<DATA = unknown | void> {
 				});
 				// eslint-disable-next-line no-console
 				console.info('send canceled child', this.attrs.name, this.attrs._id);
-			} catch (err) {
+			} catch {
 				// eslint-disable-next-line no-console
 				console.log('cannot send cancel to child');
 			}
@@ -350,6 +350,7 @@ export class Job<DATA = unknown | void> {
 			} else {
 				this.attrs.nextRunAt = null;
 			}
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		} catch (error: any) {
 			this.attrs.nextRunAt = null;
 			this.fail(error);
@@ -391,6 +392,7 @@ export class Job<DATA = unknown | void> {
 						forkHelper.options
 					);
 
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					let childError: any;
 					this.forkedChild.on('close', code => {
 						if (code) {
@@ -414,7 +416,7 @@ export class Job<DATA = unknown | void> {
 						if (typeof message === 'string') {
 							try {
 								childError = JSON.parse(message);
-							} catch (errJson) {
+							} catch {
 								childError = message;
 							}
 						} else {
@@ -431,6 +433,7 @@ export class Job<DATA = unknown | void> {
 			this.agenda.emit('success', this);
 			this.agenda.emit(`success:${this.attrs.name}`, this);
 			log('[%s:%s] has succeeded', this.attrs.name, this.attrs._id);
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		} catch (error: any) {
 			log('[%s:%s] unknown error occurred', this.attrs.name, this.attrs._id);
 

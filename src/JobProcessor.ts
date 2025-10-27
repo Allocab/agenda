@@ -1,10 +1,10 @@
 import * as debug from 'debug';
 import type { IAgendaJobStatus, IAgendaStatus } from './types/AgendaStatus';
 import type { IJobDefinition } from './types/JobDefinition';
-import type { Agenda, JobWithId } from './index';
 import type { IJobParameters } from './types/JobParameters';
 import { Job } from './Job';
 import { JobProcessingQueue } from './JobProcessingQueue';
+import type { Agenda, JobWithId } from './index';
 
 const log = debug('agenda:jobProcessor');
 
@@ -578,6 +578,7 @@ export class JobProcessor {
 						`callback already called - job ${job.attrs.name} already marked complete`
 					);
 				}
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			} catch (error: any) {
 				job.cancel(error);
 				log.extend('runOrRetry')(

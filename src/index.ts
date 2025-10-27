@@ -1,9 +1,9 @@
 import { EventEmitter } from 'events';
+import { ForkOptions } from 'child_process';
 import * as debug from 'debug';
 
 import type { Db, Filter, MongoClientOptions, Sort } from 'mongodb';
 import { SortDirection } from 'mongodb';
-import { ForkOptions } from 'child_process';
 import type { IJobDefinition } from './types/JobDefinition';
 import type { IAgendaConfig } from './types/AgendaConfig';
 import type { IDatabaseOptions, IDbConfig, IMongoOptions } from './types/DbOptions';
@@ -105,7 +105,7 @@ export class Agenda extends EventEmitter {
 			defaultLockLimit?: number;
 			lockLimit?: number;
 			defaultLockLifetime?: number;
-			// eslint-disable-next-line @typescript-eslint/ban-types
+			// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 		} & (IDatabaseOptions | IMongoOptions | {}) &
 			IDbConfig & {
 				forkHelper?: { path: string; options?: ForkOptions };
@@ -382,7 +382,8 @@ export class Agenda extends EventEmitter {
 	 */
 	create(name: string): Job<void>;
 	create<DATA = unknown>(name: string, data: DATA): Job<DATA>;
-	create(name: string, data?: unknown): Job<any> {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	create(name: string, data?: any): Job<any> {
 		log('Agenda.create(%s, [Object])', name);
 		const priority = this.definitions[name] ? this.definitions[name].priority : 0;
 		const job = new Job(this, { name, data, type: 'normal', priority });
@@ -425,6 +426,7 @@ export class Agenda extends EventEmitter {
 		names: string | string[],
 		data?: unknown,
 		options?: { timezone?: string; skipImmediate?: boolean; forkMode?: boolean }
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	): Promise<Job<any> | Job<any>[]> {
 		/**
 		 * Internal method to setup job that gets run every interval
